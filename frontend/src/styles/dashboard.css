@@ -1,0 +1,46 @@
+.dashboard{
+    display:flex;
+    height:100vh;
+}
+
+.sidebar{
+    width:220px;
+    background:#1f2937;
+    color:#fff;
+    padding:20px;
+}
+
+.sidebar ul{
+    list-style:none;
+    padding:0;
+}
+
+.sidebar li{
+    padding:12px 0;
+}
+
+.content{
+    flex:1;
+    background:#f4f7fc;
+}
+
+.navbar{
+    display:flex;
+    justify-content:space-between;
+    padding:20px;
+    background:#fff;
+}
+
+.cards{
+    display:grid;
+    grid-template-columns:repeat(2,1fr);
+    gap:20px;
+    padding:20px;
+}
+
+.card{
+    background:#fff;
+    padding:20px;
+    border-radius:10px;
+    box-shadow:0 4px 12px rgba(0,0,0,.1);
+}
