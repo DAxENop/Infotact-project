@@ -1,21 +1,33 @@
 const mongoose = require('mongoose');
-const LRU = require('lru-cache');
+const { LRUCache } = require('lru-cache');
 
 // Map tenantId -> mongoose.Connection
 const connections = new Map();
 
 // LRU cache to evict idle connections
-const cache = new LRU({
+const cache = new LRUCache({
   max: 50,
   ttl: 1000 * 60 * 10, // 10 minutes
-  dispose: (tenantId, conn) => {
-    if (conn && conn.close) conn.close().catch(() => {});
+  updateAgeOnGet: true,
+  dispose: (conn, tenantId) => {
+    connections.delete(tenantId);
+    if (conn && typeof conn.close === 'function') {
+      conn.close().catch(() => {});
+    }
   },
 });
 
 async function createConnection(tenantId, mongoUri, opts = {}) {
   if (connections.has(tenantId)) return connections.get(tenantId);
-  const conn = await mongoose.createConnection(mongoUri, { ...opts, bufferCommands: false });
+  const conn = mongoose.createConnection(mongoUri, {
+    ...opts,
+    bufferCommands: false,
+    maxPoolSize: 10,
+    minPoolSize: 1,
+  });
+
+  await conn.asPromise();
+
   connections.set(tenantId, conn);
   cache.set(tenantId, conn);
   return conn;

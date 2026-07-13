@@ -2,6 +2,8 @@ import { useState } from "react";
 import LedgerTable from "../components/LedgerTable";
 import AddTransactionModal from "../components/AddTransactionModal";
 import Toast from "../components/Toast";
+import Navbar from "../components/Navbar";
+import Sidebar from "../components/Sidebar";
 import "../styles/ledger.css";
 
 const initialTransactions = [
@@ -76,75 +78,83 @@ export default function Ledger() {
     .reduce((sum, t) => sum + t.amount, 0);
 
   return (
-    <div className="ledger-page">
+    <div className="dashboard ledger-dashboard">
+      <Sidebar />
 
-      <h2>Billing Ledger</h2>
+      <div className="content">
+        <Navbar />
 
-      <div className="cards">
+        <div className="ledger-page">
 
-        <div className="card">
-          <h3>Successful</h3>
-          <p>{success}</p>
+          <h2>Billing Ledger</h2>
+
+          <div className="cards ledger-cards">
+
+            <div className="ledger-card">
+              <h3>Successful</h3>
+              <p>{success}</p>
+            </div>
+
+            <div className="ledger-card">
+              <h3>Failed</h3>
+              <p>{failed}</p>
+            </div>
+
+            <div className="ledger-card">
+              <h3>Pending</h3>
+              <p>{pending}</p>
+            </div>
+
+            <div className="ledger-card">
+              <h3>Revenue</h3>
+              <p>₹{revenue}</p>
+            </div>
+
+          </div>
+
+          <div className="toolbar">
+
+            <input
+              type="text"
+              placeholder="Search Transaction..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+
+            <select
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+            >
+              <option>All</option>
+              <option>Success</option>
+              <option>Failed</option>
+              <option>Pending</option>
+            </select>
+
+            <button
+              className="add-btn"
+              onClick={() => setShowModal(true)}
+            >
+              + Add Transaction
+            </button>
+
+          </div>
+
+          <LedgerTable transactions={filteredTransactions} />
+
+          <AddTransactionModal
+            show={showModal}
+            onClose={() => setShowModal(false)}
+            onAdd={addTransaction}
+          />
+
+          <Toast
+            show={showToast}
+            message={toastMessage}
+            onClose={() => setShowToast(false)}
+          />
         </div>
-
-        <div className="card">
-          <h3>Failed</h3>
-          <p>{failed}</p>
-        </div>
-
-        <div className="card">
-          <h3>Pending</h3>
-          <p>{pending}</p>
-        </div>
-
-        <div className="card">
-          <h3>Revenue</h3>
-          <p>₹{revenue}</p>
-        </div>
-
       </div>
-
-      <div className="toolbar">
-
-        <input
-          type="text"
-          placeholder="Search Transaction..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-
-        <select
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        >
-          <option>All</option>
-          <option>Success</option>
-          <option>Failed</option>
-          <option>Pending</option>
-        </select>
-
-        <button
-          className="add-btn"
-          onClick={() => setShowModal(true)}
-        >
-          + Add Transaction
-        </button>
-
-      </div>
-
-      <LedgerTable transactions={filteredTransactions} />
-
-      <AddTransactionModal
-        show={showModal}
-        onClose={() => setShowModal(false)}
-        onAdd={addTransaction}
-      />
-
-      <Toast
-        show={showToast}
-        message={toastMessage}
-        onClose={() => setShowToast(false)}
-      />
 
     </div>
   );
