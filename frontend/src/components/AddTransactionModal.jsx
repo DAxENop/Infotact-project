@@ -10,15 +10,18 @@ export default function AddTransactionModal({
   const [tenant, setTenant] = useState("");
   const [amount, setAmount] = useState("");
   const [status, setStatus] = useState("Success");
+  const [error, setError] = useState("");
 
   if (!show) return null;
 
   const handleSubmit = () => {
 
     if (!tenant || !amount) {
-      alert("Please fill all fields");
+      setError("Please fill all fields before saving.");
       return;
     }
+
+    setError("");
 
     const newTransaction = {
 
@@ -39,6 +42,7 @@ export default function AddTransactionModal({
     setTenant("");
     setAmount("");
     setStatus("Success");
+    setError("");
 
     onClose();
 
@@ -51,6 +55,8 @@ export default function AddTransactionModal({
 <div className="modal">
 
 <h2>Add Transaction</h2>
+
+{error ? <p className="modal-error">{error}</p> : null}
 
 <input
 type="text"

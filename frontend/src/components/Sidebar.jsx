@@ -4,6 +4,7 @@ export default function Sidebar() {
   return (
     <div className="sidebar">
       <h1>LedgerGuard</h1>
+      <p className="sidebar-subtitle">Multi-Tenant Billing</p>
 
       <ul>
         <li>
@@ -15,11 +16,11 @@ export default function Sidebar() {
         </li>
 
         <li>
-          <a href="#">Analytics</a>
+          <Link to="/ledger">Usage Analytics</Link>
         </li>
 
         <li>
-          <a href="#">Settings</a>
+          <Link to="/">Logout</Link>
         </li>
       </ul>
     </div>
