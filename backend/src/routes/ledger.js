@@ -16,7 +16,7 @@ const createLedgerEntrySchema = z.object({
     .min(6)
     .max(100)
     .regex(/^[A-Za-z0-9_-]+$/),
-  amount: z.number().positive(),
+  amount: z.coerce.number().positive(),
   meta: z.record(z.unknown()).optional().default({}),
 });
 
