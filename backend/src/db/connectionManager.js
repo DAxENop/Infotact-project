@@ -1,67 +1,79 @@
-const mongoose = require('mongoose');
-const { LRUCache } = require('lru-cache');
-
-// Map tenantId -> mongoose.Connection
+const mongoose = require("mongoose");
+const { LRUCache } = require("lru-cache");
 const connections = new Map();
-
-// LRU cache to evict idle connections
 const cache = new LRUCache({
   max: 50,
-  ttl: 1000 * 60 * 10, // 10 minutes
+  ttl: 1000 * 60 * 10,
   updateAgeOnGet: true,
-  dispose: (conn, tenantId) => {
+  dispose: (connection, tenantId) => {
     connections.delete(tenantId);
-    if (conn && typeof conn.close === 'function') {
-      conn.close().catch(() => {});
+    if (connection && typeof connection.close === "function") {
+      connection.close().catch(() => {});
     }
   },
 });
 
-async function createConnection(tenantId, mongoUri, opts = {}) {
-  if (connections.has(tenantId)) return connections.get(tenantId);
-  const conn = mongoose.createConnection(mongoUri, {
-    ...opts,
+const createConnection = async (tenantId,mongoUri,options = {}) => {
+  if (connections.has(tenantId)) {
+    return connections.get(tenantId);
+  }
+  const connection = mongoose.createConnection(mongoUri, {
+    ...options,
     bufferCommands: false,
     maxPoolSize: 10,
     minPoolSize: 1,
   });
 
-  await conn.asPromise();
+  await connection.asPromise();
+  connections.set(tenantId, connection);
+  cache.set(tenantId, connection);
+  return connection;
+};
 
-  connections.set(tenantId, conn);
-  cache.set(tenantId, conn);
-  return conn;
-}
+const getConnection = (tenantId) => {
+  const connection = connections.get(tenantId);
+  if (connection) {
+    cache.get(tenantId);
+  }
+  return connection;
+};
 
-function getConnection(tenantId) {
-  const c = connections.get(tenantId);
-  if (c) cache.get(tenantId); // touch
-  return c;
-}
-
-async function closeConnection(tenantId) {
-  const c = connections.get(tenantId);
-  if (!c) return;
-  await c.close();
+const closeConnection = async (tenantId) => {
+  const connection = connections.get(tenantId);
+  if (!connection) {
+    return;
+  }
+  await connection.close();
   connections.delete(tenantId);
   cache.delete(tenantId);
-}
+};
 
-async function withTenantConnection(tenantId, mongoUri, fn) {
-  let conn = getConnection(tenantId);
-  if (!conn) conn = await createConnection(tenantId, mongoUri);
+const withTenantConnection = async (tenantId,mongoUri,callback) => {
+  let connection = getConnection(tenantId);
 
-  // Provide a session-bound transaction helper
-  const session = await conn.startSession();
-  let res;
-  try {
-    await session.withTransaction(async () => {
-      res = await fn(conn, session);
-    });
-  } finally {
-    await session.endSession();
+  if (!connection) {
+    connection = await createConnection(tenantId, mongoUri);
   }
-  return res;
-}
+  const session = await connection.startSession();
 
-module.exports = { createConnection, getConnection, closeConnection, withTenantConnection };
+  try {
+    let result;
+    await session.withTransaction(async () => {
+      result = await callback(connection, session);
+    });
+
+    await session.endSession();
+
+    return result;
+  } catch (error) {
+    await session.endSession();
+    throw error;
+  }
+};
+
+module.exports = {
+  createConnection,
+  getConnection,
+  closeConnection,
+  withTenantConnection,
+};
