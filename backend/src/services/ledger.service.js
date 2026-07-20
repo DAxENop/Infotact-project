@@ -1,6 +1,6 @@
 const { withTenantConnection } = require("../db/connectionManager");
-const {getLedgerModel} = require("../models/ledger.model");
-const {acquireLock,releaseLock} = require("./redisLock.service");
+const {getLedgerModel} = require("../models/ledger");
+const {acquireLock,releaseLock} = require("./redislock");
 const getTenantDbUri = (tenantId) => {
     const safeTenantId = tenantId.toUpperCase().replace(/[^A-Z0-9_]/g, "_");
     return process.env[`DB_URI_${safeTenantId}`];
