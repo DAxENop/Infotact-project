@@ -1,5 +1,5 @@
 const express = require("express");
-const { create } = require("../controllers/ledger.controller");
+const { create } = require("../controllers/ledger");
 
 const router = express.Router();
 

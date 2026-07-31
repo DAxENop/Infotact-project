@@ -20,4 +20,4 @@ const getLedgerModel = (connection) => {
   return connection.model("Ledger", ledgerSchema);
 };
 
-module.exports = getLedgerModel;
+module.exports = { getLedgerModel };
