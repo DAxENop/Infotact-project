@@ -6,7 +6,14 @@ export function ThemeProvider({ children }) {
   const [mode, setMode] = useState(() => localStorage.getItem("lg_theme") || "dark");
 
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", mode === "dark" ? "business" : "corporate");
+    const root = document.documentElement;
+    if (mode === "dark") {
+      root.classList.add("dark");
+      root.removeAttribute("data-theme");
+    } else {
+      root.classList.remove("dark");
+      root.removeAttribute("data-theme");
+    }
     localStorage.setItem("lg_theme", mode);
   }, [mode]);
 
