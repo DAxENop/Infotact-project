@@ -45,7 +45,8 @@ const MONGO_URI = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/ledgerguar
 
 const server = app.listen(config.PORT, async () => {
   try {
-    await mongoose.connect(MONGO_URI);
+    const uri = MONGO_URI.includes("retryWrites") ? MONGO_URI : MONGO_URI + (MONGO_URI.includes("?") ? "&" : "?") + "retryWrites=false";
+    await mongoose.connect(uri);
     console.log(`[DB] Connected to MongoDB: ${MONGO_URI}`);
   } catch (err) {
     console.error("[DB] MongoDB connection failed:", err.message);

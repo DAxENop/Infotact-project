@@ -1,0 +1,61 @@
+@import "tailwindcss";
+@plugin "daisyui";
+
+/*
+ * Colors via .dark class only — no DaisyUI theme switching.
+ * Pure blue primary, green success, amber warning, red error. Zero purple.
+ */
+
+:root {
+  color-scheme: light;
+  --color-base-100: oklch(100% 0 0);
+  --color-base-200: oklch(95% 0 0);
+  --color-base-300: oklch(88% 0 0);
+  --color-base-content: oklch(20% 0 0);
+  --color-primary: oklch(50% 0.17 245);
+  --color-primary-content: oklch(100% 0 0);
+  --color-secondary: oklch(45% 0.05 245);
+  --color-secondary-content: oklch(100% 0 0);
+  --color-accent: oklch(50% 0.15 160);
+  --color-accent-content: oklch(100% 0 0);
+  --color-neutral: oklch(20% 0 0);
+  --color-neutral-content: oklch(95% 0 0);
+  --color-info: oklch(50% 0.14 245);
+  --color-info-content: oklch(100% 0 0);
+  --color-success: oklch(50% 0.17 155);
+  --color-success-content: oklch(100% 0 0);
+  --color-warning: oklch(70% 0.17 85);
+  --color-warning-content: oklch(10% 0 0);
+  --color-error: oklch(50% 0.22 25);
+  --color-error-content: oklch(100% 0 0);
+  --radius-selector: 0.5rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.75rem;
+}
+
+.dark {
+  color-scheme: dark;
+  --color-base-100: oklch(15% 0 0);
+  --color-base-200: oklch(12% 0 0);
+  --color-base-300: oklch(10% 0 0);
+  --color-base-content: oklch(90% 0 0);
+  --color-primary: oklch(62% 0.17 245);
+  --color-primary-content: oklch(100% 0 0);
+  --color-secondary: oklch(55% 0.05 245);
+  --color-secondary-content: oklch(95% 0 0);
+  --color-accent: oklch(65% 0.15 160);
+  --color-accent-content: oklch(10% 0 0);
+  --color-neutral: oklch(22% 0 0);
+  --color-neutral-content: oklch(88% 0 0);
+  --color-info: oklch(62% 0.14 245);
+  --color-info-content: oklch(100% 0 0);
+  --color-success: oklch(65% 0.17 155);
+  --color-success-content: oklch(100% 0 0);
+  --color-warning: oklch(78% 0.15 85);
+  --color-warning-content: oklch(15% 0 0);
+  --color-error: oklch(62% 0.2 25);
+  --color-error-content: oklch(100% 0 0);
+  --radius-selector: 0.5rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.75rem;
+}

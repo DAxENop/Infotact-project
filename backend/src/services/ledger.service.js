@@ -21,14 +21,14 @@ const createLedgerEntry = async ({tenant,entryId,amount,meta}) => {
       return {success: false,statusCode: 500,data: {error: "Tenant DB is not configured"}};
     }
     const result = await withTenantConnection(tenant,tenantDbUri,
-      async (connection, session) => {
+      async (connection) => {
         const Ledger = getLedgerModel(connection);
-        const existingEntry = await Ledger.findOne({tenant,entryId}).session(session).exec();
+        const existingEntry = await Ledger.findOne({tenant,entryId}).exec();
         if (existingEntry) {
           return {status: "exists"};
         }
         const ledgerEntry = new Ledger({tenant,entryId,amount,meta});
-        await ledgerEntry.save({session});
+        await ledgerEntry.save();
         return {status: "created",doc: ledgerEntry};
       }
     );
