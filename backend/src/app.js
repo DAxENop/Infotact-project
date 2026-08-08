@@ -3,6 +3,7 @@ const cors = require("cors");
 const helmet = require("helmet");
 const { rateLimit } = require("express-rate-limit");
 const mongoose = require("mongoose");
+const { Server } = require("socket.io");
 const config = require("./config");
 const tenantJwt = require("./middleware/tenantJwt");
 const authRoutes = require("./routes/auth");
@@ -55,9 +56,32 @@ const server = app.listen(config.PORT, async () => {
   console.log(`[SERVER] Running on port ${config.PORT}`);
 });
 
+// Socket.io setup
+const io = new Server(server, {
+  cors: { origin: config.CORS_ORIGIN, methods: ["GET", "POST"] },
+});
+
+// Tenant namespace: clients join room = tenantId
+io.on("connection", (socket) => {
+  console.log(`[WS] Client connected: ${socket.id}`);
+  socket.on("join", (tenantId) => {
+    if (tenantId && /^[A-Za-z0-9_-]{2,64}$/.test(tenantId)) {
+      socket.join(tenantId);
+      console.log(`[WS] ${socket.id} joined room: ${tenantId}`);
+    }
+  });
+  socket.on("disconnect", () => {
+    console.log(`[WS] Client disconnected: ${socket.id}`);
+  });
+});
+
+// Expose io for controllers
+app.set("io", io);
+
 // Graceful shutdown
 const shutdown = async (signal) => {
   console.log(`\n[SHUTDOWN] ${signal} received, closing...`);
+  io.close();
   server.close(async () => {
     await mongoose.disconnect().catch(() => {});
     redis.disconnect();

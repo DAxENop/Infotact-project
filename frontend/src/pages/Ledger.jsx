@@ -39,11 +39,17 @@ export default function Ledger() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const payload = {
-        entryId: form.entryId,
-        amount: parseFloat(form.amount),
-        meta: form.meta ? JSON.parse(form.meta) : {},
-      };
+      let parsedMeta = {};
+      if (form.meta.trim()) {
+        try {
+          parsedMeta = JSON.parse(form.meta);
+        } catch {
+          toast("Invalid JSON in metadata field", "error");
+          setSubmitting(false);
+          return;
+        }
+      }
+      const payload = { entryId: form.entryId, amount: parseFloat(form.amount), meta: parsedMeta };
       const res = await ledgerAPI.create(payload);
       toast(res.data.status === "exists" ? "Entry already exists (idempotent)" : "Entry created");
       setShowAdd(false);
@@ -54,6 +60,12 @@ export default function Ledger() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const getBadgeClass = (status) => {
+    if (status === "failed") return "badge-error";
+    if (status === "pending") return "badge-warning";
+    return "badge-success";
   };
 
   return (
@@ -100,7 +112,11 @@ export default function Ledger() {
                         <td className="font-mono text-xs">{e.entryId}</td>
                         <td className="font-semibold">${e.amount.toFixed(2)}</td>
                         <td className="text-base-content/50">{new Date(e.createdAt).toLocaleDateString()}</td>
-                        <td><span className="badge badge-success badge-sm">posted</span></td>
+                        <td>
+                          <span className={`badge badge-sm ${getBadgeClass(e.status)}`}>
+                            {e.status || "posted"}
+                          </span>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
