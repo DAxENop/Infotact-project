@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { DollarSign, Receipt, Database, Activity } from "lucide-react";
 import { ledgerAPI } from "@/lib/api";
+import { DollarSign, Receipt, Activity, Database } from "lucide-react";
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title, Tooltip, Legend, Filler } from "chart.js";
 import { Bar, Line } from "react-chartjs-2";
 
@@ -23,14 +21,13 @@ export default function Dashboard() {
   const totalRevenue = stats.entries.reduce((sum, e) => sum + (e.amount || 0), 0);
   const avgAmount = stats.entries.length ? totalRevenue / stats.entries.length : 0;
 
-  const cards = [
-    { title: "Total Revenue", value: `$${totalRevenue.toLocaleString()}`, icon: DollarSign, color: "text-emerald-600" },
-    { title: "Transactions", value: stats.total, icon: Receipt, color: "text-blue-600" },
-    { title: "Avg. Amount", value: `$${avgAmount.toFixed(2)}`, icon: Activity, color: "text-amber-600" },
-    { title: "Active DBs", value: "1", icon: Database, color: "text-purple-600" },
+  const statCards = [
+    { title: "Total Revenue", value: `$${totalRevenue.toLocaleString()}`, icon: DollarSign, accent: "text-success", bg: "bg-success/10" },
+    { title: "Transactions", value: stats.total, icon: Receipt, accent: "text-info", bg: "bg-info/10" },
+    { title: "Avg. Amount", value: `$${avgAmount.toFixed(2)}`, icon: Activity, accent: "text-warning", bg: "bg-warning/10" },
+    { title: "Active DBs", value: "1", icon: Database, accent: "text-secondary", bg: "bg-secondary/10" },
   ];
 
-  // Group entries by date for charts
   const byDate = {};
   stats.entries.forEach((e) => {
     const day = new Date(e.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -45,9 +42,10 @@ export default function Dashboard() {
     datasets: [{
       label: "Transactions",
       data: labels.map((l) => byDate[l].count),
-      backgroundColor: "rgba(59, 130, 246, 0.5)",
+      backgroundColor: "rgba(59, 130, 246, 0.6)",
       borderColor: "rgb(59, 130, 246)",
-      borderWidth: 1,
+      borderWidth: 2,
+      borderRadius: 6,
     }],
   };
 
@@ -58,18 +56,20 @@ export default function Dashboard() {
       data: labels.map((l) => byDate[l].total),
       fill: true,
       borderColor: "rgb(16, 185, 129)",
-      backgroundColor: "rgba(16, 185, 129, 0.1)",
+      backgroundColor: "rgba(16, 185, 129, 0.08)",
       tension: 0.4,
+      pointRadius: 4,
+      pointHoverRadius: 6,
     }],
   };
 
-  const chartOptions = {
+  const chartOpts = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: { legend: { display: false } },
     scales: {
       x: { grid: { display: false } },
-      y: { beginAtZero: true, grid: { color: "rgba(0,0,0,0.05)" } },
+      y: { beginAtZero: true },
     },
   };
 
@@ -77,70 +77,75 @@ export default function Dashboard() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground text-sm">Overview of your billing activity</p>
+        <p className="text-base-content/50 text-sm">Overview of your billing activity</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {cards.map((card) => (
-          <Card key={card.title}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">{card.title}</CardTitle>
-              <card.icon className={`h-4 w-4 ${card.color}`} />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{loading ? "—" : card.value}</div>
-            </CardContent>
-          </Card>
+        {statCards.map((c) => (
+          <div key={c.title} className="stat bg-base-100 rounded-box border border-base-300">
+            <div className={`stat-figure ${c.accent}`}>
+              <div className={`h-10 w-10 rounded-lg ${c.bg} flex items-center justify-center`}>
+                <c.icon className="h-5 w-5" />
+              </div>
+            </div>
+            <div className="stat-title">{c.title}</div>
+            <div className="stat-value text-2xl">{loading ? "—" : c.value}</div>
+          </div>
         ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Transactions by Day</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64">
-              {labels.length ? <Bar data={barData} options={chartOptions} /> : <p className="text-sm text-muted-foreground text-center pt-20">No data yet</p>}
+        <div className="card bg-base-100 border border-base-300">
+          <div className="card-body">
+            <h3 className="card-title text-sm">Transactions by Day</h3>
+            <div className="h-64 mt-2">
+              {labels.length ? <Bar data={barData} options={chartOpts} /> : <p className="text-base-content/30 text-sm text-center pt-20">No data yet</p>}
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Revenue Trend</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64">
-              {labels.length ? <Line data={lineData} options={chartOptions} /> : <p className="text-sm text-muted-foreground text-center pt-20">No data yet</p>}
+          </div>
+        </div>
+        <div className="card bg-base-100 border border-base-300">
+          <div className="card-body">
+            <h3 className="card-title text-sm">Revenue Trend</h3>
+            <div className="h-64 mt-2">
+              {labels.length ? <Line data={lineData} options={chartOpts} /> : <p className="text-base-content/30 text-sm text-center pt-20">No data yet</p>}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Recent Transactions</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <div className="card bg-base-100 border border-base-300">
+        <div className="card-body">
+          <h3 className="card-title text-sm">Recent Transactions</h3>
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading...</p>
+            <div className="flex justify-center py-8"><span className="loading loading-spinner loading-sm"></span></div>
           ) : stats.entries.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No transactions yet. Create one from the Ledger page.</p>
+            <p className="text-base-content/30 text-sm text-center py-8">No transactions yet. Create one from the Ledger page.</p>
           ) : (
-            <div className="space-y-2">
-              {stats.entries.slice(0, 5).map((entry) => (
-                <div key={entry._id} className="flex items-center justify-between py-2 border-b last:border-0">
-                  <div>
-                    <p className="text-sm font-medium">{entry.entryId}</p>
-                    <p className="text-xs text-muted-foreground">{new Date(entry.createdAt).toLocaleDateString()}</p>
-                  </div>
-                  <Badge variant="success">${entry.amount.toFixed(2)}</Badge>
-                </div>
-              ))}
+            <div className="overflow-x-auto">
+              <table className="table table-sm">
+                <thead>
+                  <tr>
+                    <th className="text-xs">Entry ID</th>
+                    <th className="text-xs">Amount</th>
+                    <th className="text-xs">Date</th>
+                    <th className="text-xs">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.entries.slice(0, 5).map((e) => (
+                    <tr key={e._id}>
+                      <td className="font-mono text-xs">{e.entryId}</td>
+                      <td className="font-semibold">${e.amount.toFixed(2)}</td>
+                      <td className="text-base-content/50">{new Date(e.createdAt).toLocaleDateString()}</td>
+                      <td><span className="badge badge-success badge-sm">posted</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

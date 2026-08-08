@@ -1,10 +1,12 @@
 import { Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
 import Sidebar from "./Sidebar";
-import { Menu, LogOut } from "lucide-react";
+import { Shield, Sun, Moon, LogOut } from "lucide-react";
 
 export default function Layout() {
   const { isAuthenticated, logout, user } = useAuth();
+  const { mode, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   if (!isAuthenticated) {
@@ -13,23 +15,26 @@ export default function Layout() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-base-200">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="flex items-center justify-between border-b px-6 py-3 bg-background">
+        <header className="flex items-center justify-between border-b border-base-300 px-6 py-3 bg-base-100">
           <div className="flex items-center gap-3 md:hidden">
-            <Menu className="h-5 w-5" />
+            <Shield className="h-5 w-5 text-primary" />
             <span className="font-bold">LedgerGuard</span>
           </div>
           <div />
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-muted-foreground hidden sm:inline">{user?.tenantId}</span>
-            <button onClick={() => { logout(); navigate("/"); }} className="md:hidden p-2 hover:bg-muted rounded-md cursor-pointer">
+          <div className="flex items-center gap-2">
+            <span className="badge badge-outline badge-sm hidden sm:inline-flex">{user?.tenantId}</span>
+            <button onClick={toggleTheme} className="btn btn-ghost btn-sm btn-circle">
+              {mode === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
+            <button onClick={() => { logout(); navigate("/"); }} className="btn btn-ghost btn-sm btn-circle md:hidden">
               <LogOut className="h-4 w-4" />
             </button>
           </div>
         </header>
-        <main className="flex-1 overflow-y-auto p-6 bg-muted/30">
+        <main className="flex-1 overflow-y-auto p-6">
           <Outlet />
         </main>
       </div>

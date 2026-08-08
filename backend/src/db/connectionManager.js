@@ -17,7 +17,8 @@ const createConnection = async (tenantId,mongoUri,options = {}) => {
   if (connections.has(tenantId)) {
     return connections.get(tenantId);
   }
-  const connection = mongoose.createConnection(mongoUri, {
+  const uri = mongoUri.includes("retryWrites") ? mongoUri : mongoUri + (mongoUri.includes("?") ? "&" : "?") + "retryWrites=false";
+  const connection = mongoose.createConnection(uri, {
     ...options,
     bufferCommands: false,
     maxPoolSize: 10,
@@ -52,21 +53,8 @@ const withTenantConnection = async (tenantId,mongoUri,callback) => {
   if (!connection) {
     connection = await createConnection(tenantId, mongoUri);
   }
-  const session = await connection.startSession();
-
-  try {
-    let result;
-    await session.withTransaction(async () => {
-      result = await callback(connection, session);
-    });
-
-    await session.endSession();
-
-    return result;
-  } catch (error) {
-    await session.endSession();
-    throw error;
-  }
+  // ponytail: skip session/transactions — standalone Mongo doesn't support them
+  return callback(connection, null);
 };
 
 module.exports = {

@@ -6,7 +6,8 @@ const config = require("../config");
 const JWT_SECRET = process.env.JWT_SECRET || "ledgerguard-dev-secret-change-in-prod";
 
 const getMainConnection = async () => {
-  const uri = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/ledgerguard_main";
+  const baseUri = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/ledgerguard_main";
+  const uri = baseUri.includes("retryWrites") ? baseUri : baseUri + (baseUri.includes("?") ? "&" : "?") + "retryWrites=false";
   if (mongoose.connection.readyState === 1) return mongoose.connection;
   return mongoose.connect(uri);
 };

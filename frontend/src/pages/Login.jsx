@@ -3,11 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { authAPI } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Lock, Mail, Building2 } from "lucide-react";
+import { useTheme } from "@/context/ThemeContext";
+import { Shield, Sun, Moon } from "lucide-react";
 
 export default function Login() {
   const [isRegister, setIsRegister] = useState(false);
@@ -16,6 +13,7 @@ export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
+  const { mode, toggleTheme } = useTheme();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -24,7 +22,6 @@ export default function Login() {
       const res = isRegister
         ? await authAPI.register(form)
         : await authAPI.login({ email: form.email, password: form.password });
-
       login(res.data.token, res.data.user);
       toast(isRegister ? "Account created!" : "Welcome back!");
       navigate("/dashboard");
@@ -36,70 +33,65 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-base-200 px-4">
+      <button onClick={toggleTheme} className="btn btn-ghost btn-sm btn-circle fixed top-4 right-4 z-10">
+        {mode === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      </button>
+
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 mb-2">
-            <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center">
-              <Lock className="h-5 w-5 text-primary-foreground" />
+          <div className="inline-flex items-center gap-3 mb-2">
+            <div className="h-11 w-11 rounded-xl bg-primary flex items-center justify-center">
+              <Shield className="h-6 w-6 text-primary-content" />
             </div>
-            <h1 className="text-2xl font-bold">LedgerGuard</h1>
+            <h1 className="text-3xl font-bold">LedgerGuard</h1>
           </div>
-          <p className="text-muted-foreground text-sm">Zero-knowledge billing engine</p>
+          <p className="text-base-content/50 text-sm">Zero-knowledge multi-tenant billing engine</p>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>{isRegister ? "Create account" : "Sign in"}</CardTitle>
-            <CardDescription>
+        <div className="card bg-base-100 border border-base-300">
+          <div className="card-body">
+            <h2 className="card-title">{isRegister ? "Create account" : "Sign in"}</h2>
+            <p className="text-base-content/50 text-sm mb-2">
               {isRegister ? "Register a new tenant account" : "Enter your credentials to continue"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            </p>
+
+            <form onSubmit={handleSubmit} className="space-y-3">
               {isRegister && (
                 <>
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Name</Label>
-                    <div className="relative">
-                      <Input id="name" placeholder="Acme Corp" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-                    </div>
+                  <div className="form-control">
+                    <label className="label"><span className="label-text font-medium">Name</span></label>
+                    <input type="text" placeholder="Acme Corp" className="input input-bordered w-full" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="tenantId">Tenant ID</Label>
-                    <div className="relative">
-                      <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input id="tenantId" placeholder="company_a" className="pl-9" value={form.tenantId} onChange={(e) => setForm({ ...form, tenantId: e.target.value })} required />
-                    </div>
+                  <div className="form-control">
+                    <label className="label"><span className="label-text font-medium">Tenant ID</span></label>
+                    <input type="text" placeholder="company_a" className="input input-bordered w-full" value={form.tenantId} onChange={(e) => setForm({ ...form, tenantId: e.target.value })} required />
                   </div>
                 </>
               )}
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input id="email" type="email" placeholder="you@company.com" className="pl-9" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
-                </div>
+              <div className="form-control">
+                <label className="label"><span className="label-text font-medium">Email</span></label>
+                <input type="email" placeholder="you@company.com" className="input input-bordered w-full" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input id="password" type="password" placeholder="••••••" className="pl-9" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
-                </div>
+              <div className="form-control">
+                <label className="label"><span className="label-text font-medium">Password</span></label>
+                <input type="password" placeholder="••••••" className="input input-bordered w-full" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
               </div>
-              <Button type="submit" className="w-full" disabled={loading}>
+              <button type="submit" className={`btn btn-primary w-full mt-2 ${loading ? "loading" : ""}`}>
                 {loading ? "Please wait..." : isRegister ? "Create account" : "Sign in"}
-              </Button>
+              </button>
             </form>
-            <div className="mt-4 text-center text-sm text-muted-foreground">
+
+            <div className="divider text-xs">OR</div>
+
+            <p className="text-center text-sm text-base-content/50">
               {isRegister ? "Already have an account?" : "Don't have an account?"}{" "}
-              <button onClick={() => setIsRegister(!isRegister)} className="text-primary underline hover:no-underline cursor-pointer">
+              <button onClick={() => setIsRegister(!isRegister)} className="link link-primary font-medium">
                 {isRegister ? "Sign in" : "Register"}
               </button>
-            </div>
-          </CardContent>
-        </Card>
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
