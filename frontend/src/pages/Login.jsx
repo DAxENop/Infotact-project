@@ -26,7 +26,10 @@ export default function Login() {
       toast(isRegister ? "Account created!" : "Welcome back!");
       navigate("/dashboard");
     } catch (err) {
-      toast(err.response?.data?.error || "Something went wrong", "error");
+      const msg = err.response?.data?.error || "Something went wrong";
+      const issues = err.response?.data?.issues?.fieldErrors;
+      const detail = issues ? Object.entries(issues).map(([k, v]) => `${k}: ${v.join(", ")}`).join("; ") : "";
+      toast(detail || msg, "error");
     } finally {
       setLoading(false);
     }
@@ -61,7 +64,7 @@ export default function Login() {
                 <>
                   <div className="form-control">
                     <label className="label"><span className="label-text font-medium">Name</span></label>
-                    <input type="text" placeholder="Acme Corp" className="input input-bordered w-full" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                    <input type="text" placeholder="Acme Corp" className="input input-bordered w-full" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
                   </div>
                   <div className="form-control">
                     <label className="label"><span className="label-text font-medium">Tenant ID</span></label>
