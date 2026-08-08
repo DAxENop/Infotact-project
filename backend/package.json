@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
+    "bench": "node src/benchmarks/query-perf.js",
     "test": "echo \"No tests configured yet\""
   },
   "keywords": [],
@@ -23,6 +24,7 @@
     "jsonwebtoken": "^9.0.3",
     "lru-cache": "^11.0.1",
     "mongoose": "^9.7.4",
+    "socket.io": "^4.8.3",
     "zod": "^3.23.8"
   },
   "devDependencies": {

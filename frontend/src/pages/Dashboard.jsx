@@ -1,35 +1,152 @@
-import { useState, useEffect } from "react";
-import { ledgerAPI } from "@/lib/api";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { ledgerAPI, socket } from "@/lib/api";
 import { DollarSign, Receipt, Activity, Database } from "lucide-react";
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title, Tooltip, Legend, Filler } from "chart.js";
-import { Bar, Line } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  PointElement,
+  LineElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+} from "chart.js";
+import { Bar, Line, Doughnut } from "react-chartjs-2";
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title, Tooltip, Legend, Filler);
+ChartJS.register(
+  CategoryScale, LinearScale, BarElement, PointElement,
+  LineElement, ArcElement, Title, Tooltip, Legend, Filler
+);
 
-export default function Dashboard() {
-  const [stats, setStats] = useState({ total: 0, entries: [] });
-  const [loading, setLoading] = useState(true);
+const STATUS_COLORS = {
+  posted: { bg: "bg-success/10", text: "text-success", hex: "rgb(16, 185, 129)" },
+  pending: { bg: "bg-warning/10", text: "text-warning", hex: "rgb(245, 158, 11)" },
+  failed: { bg: "bg-error/10", text: "text-error", hex: "rgb(239, 68, 68)" },
+};
+
+// RequestAnimationFrame-based animated counter for smooth number transitions
+function useAnimatedNumber(target, duration = 600) {
+  const [display, setDisplay] = useState(0);
+  const rafRef = useRef(null);
+  const startRef = useRef(null);
+  const fromRef = useRef(0);
 
   useEffect(() => {
-    ledgerAPI
-      .list(1, 100)
-      .then((res) => setStats({ total: res.data.total || 0, entries: res.data.entries || [] }))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    fromRef.current = display;
+    startRef.current = null;
+    const animate = (ts) => {
+      if (!startRef.current) startRef.current = ts;
+      const progress = Math.min((ts - startRef.current) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+      const current = fromRef.current + (target - fromRef.current) * eased;
+      setDisplay(current);
+      if (progress < 1) rafRef.current = requestAnimationFrame(animate);
+    };
+    rafRef.current = requestAnimationFrame(animate);
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, [target, duration]);
+
+  return display;
+}
+
+function StatCard({ title, value, icon: Icon, accent, bg, isNumber }) {
+  const animated = useAnimatedNumber(isNumber ? value : 0);
+  return (
+    <div className="stat bg-base-100 rounded-box border border-base-300">
+      <div className={`stat-figure ${accent}`}>
+        <div className={`h-10 w-10 rounded-lg ${bg} flex items-center justify-center`}>
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+      <div className="stat-title">{title}</div>
+      <div className="stat-value text-2xl">{isNumber ? animated.toLocaleString() : value}</div>
+    </div>
+  );
+}
+
+export default function Dashboard() {
+  const [stats, setStats] = useState(null);
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [dateRange, setDateRange] = useState("30d");
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [statsRes, listRes] = await Promise.all([
+        ledgerAPI.stats(),
+        ledgerAPI.list(1, 100),
+      ]);
+      setStats(statsRes.data);
+      setEntries(listRes.data.entries || []);
+    } catch (err) {
+      setError(err.response?.data?.error || "Failed to load dashboard");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const totalRevenue = stats.entries.reduce((sum, e) => sum + (e.amount || 0), 0);
-  const avgAmount = stats.entries.length ? totalRevenue / stats.entries.length : 0;
+  useEffect(() => {
+    fetchData();
+
+    // Connect Socket.io
+    const user = JSON.parse(localStorage.getItem("lg_user") || "{}");
+    if (user.tenant) {
+      socket.connect();
+      socket.emit("join", user.tenant);
+    }
+
+    const onLedgerCreated = (doc) => {
+      setEntries((prev) => [doc, ...prev].slice(0, 100));
+    };
+    socket.on("ledger:created", onLedgerCreated);
+
+    return () => {
+      socket.off("ledger:created", onLedgerCreated);
+      socket.disconnect();
+    };
+  }, [fetchData]);
+
+  // Filter entries by date range
+  const filterByRange = useCallback((range) => {
+    const now = Date.now();
+    const ms = { "7d": 7, "30d": 30, "90d": 90 }[range] || 30;
+    const cutoff = new Date(now - ms * 24 * 60 * 60 * 1000);
+    return entries.filter((e) => new Date(e.createdAt) >= cutoff);
+  }, [entries]);
+
+  const filtered = filterByRange(dateRange);
+  const totalRevenue = filtered.reduce((sum, e) => sum + (e.amount || 0), 0);
+  const avgAmount = filtered.length ? totalRevenue / filtered.length : 0;
+
+  // Status breakdown from aggregation or fallback to client-side
+  const statusMap = {};
+  if (stats?.byStatus) {
+    stats.byStatus.forEach((s) => { statusMap[s._id || "posted"] = s; });
+  } else {
+    filtered.forEach((e) => {
+      const st = e.status || "posted";
+      if (!statusMap[st]) statusMap[st] = { count: 0, total: 0 };
+      statusMap[st].count++;
+      statusMap[st].total += e.amount;
+    });
+  }
 
   const statCards = [
     { title: "Total Revenue", value: `$${totalRevenue.toLocaleString()}`, icon: DollarSign, accent: "text-success", bg: "bg-success/10" },
-    { title: "Transactions", value: stats.total, icon: Receipt, accent: "text-info", bg: "bg-info/10" },
+    { title: "Transactions", value: filtered.length, icon: Receipt, accent: "text-info", bg: "bg-info/10" },
     { title: "Avg. Amount", value: `$${avgAmount.toFixed(2)}`, icon: Activity, accent: "text-warning", bg: "bg-warning/10" },
     { title: "Active DBs", value: "1", icon: Database, accent: "text-secondary", bg: "bg-secondary/10" },
   ];
 
+  // Group by date for charts
   const byDate = {};
-  stats.entries.forEach((e) => {
+  filtered.forEach((e) => {
     const day = new Date(e.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" });
     if (!byDate[day]) byDate[day] = { count: 0, total: 0 };
     byDate[day].count++;
@@ -63,6 +180,16 @@ export default function Dashboard() {
     }],
   };
 
+  const statusLabels = Object.keys(statusMap);
+  const doughnutData = {
+    labels: statusLabels.map((s) => s.charAt(0).toUpperCase() + s.slice(1)),
+    datasets: [{
+      data: statusLabels.map((s) => statusMap[s].count),
+      backgroundColor: statusLabels.map((s) => STATUS_COLORS[s]?.hex || "rgb(107,114,128)"),
+      borderWidth: 0,
+    }],
+  };
+
   const chartOpts = {
     responsive: true,
     maintainAspectRatio: false,
@@ -73,28 +200,54 @@ export default function Dashboard() {
     },
   };
 
+  const doughnutOpts = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: "bottom", labels: { padding: 16, usePointStyle: true } },
+    },
+    cutout: "60%",
+  };
+
+  const getBadgeClass = (status) => {
+    const s = STATUS_COLORS[status] || STATUS_COLORS.posted;
+    return `${s.bg} ${s.text}`;
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <p className="text-base-content/50 text-sm">Overview of your billing activity</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <p className="text-base-content/50 text-sm">Overview of your billing activity</p>
+        </div>
+        <div className="join">
+          {["7d", "30d", "90d"].map((r) => (
+            <button
+              key={r}
+              className={`join-item btn btn-sm ${dateRange === r ? "btn-active" : ""}`}
+              onClick={() => setDateRange(r)}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {error && (
+        <div className="alert alert-error">
+          <span>{error}</span>
+          <button className="btn btn-sm btn-ghost" onClick={fetchData}>Retry</button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map((c) => (
-          <div key={c.title} className="stat bg-base-100 rounded-box border border-base-300">
-            <div className={`stat-figure ${c.accent}`}>
-              <div className={`h-10 w-10 rounded-lg ${c.bg} flex items-center justify-center`}>
-                <c.icon className="h-5 w-5" />
-              </div>
-            </div>
-            <div className="stat-title">{c.title}</div>
-            <div className="stat-value text-2xl">{loading ? "—" : c.value}</div>
-          </div>
+          <StatCard key={c.title} {...c} isNumber={typeof c.value === "number"} />
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="card bg-base-100 border border-base-300">
           <div className="card-body">
             <h3 className="card-title text-sm">Transactions by Day</h3>
@@ -111,6 +264,14 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+        <div className="card bg-base-100 border border-base-300">
+          <div className="card-body">
+            <h3 className="card-title text-sm">Status Breakdown</h3>
+            <div className="h-64 mt-2">
+              {statusLabels.length ? <Doughnut data={doughnutData} options={doughnutOpts} /> : <p className="text-base-content/30 text-sm text-center pt-20">No data yet</p>}
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="card bg-base-100 border border-base-300">
@@ -118,7 +279,7 @@ export default function Dashboard() {
           <h3 className="card-title text-sm">Recent Transactions</h3>
           {loading ? (
             <div className="flex justify-center py-8"><span className="loading loading-spinner loading-sm"></span></div>
-          ) : stats.entries.length === 0 ? (
+          ) : filtered.length === 0 ? (
             <p className="text-base-content/30 text-sm text-center py-8">No transactions yet. Create one from the Ledger page.</p>
           ) : (
             <div className="overflow-x-auto">
@@ -132,12 +293,16 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {stats.entries.slice(0, 5).map((e) => (
+                  {filtered.slice(0, 5).map((e) => (
                     <tr key={e._id}>
                       <td className="font-mono text-xs">{e.entryId}</td>
                       <td className="font-semibold">${e.amount.toFixed(2)}</td>
                       <td className="text-base-content/50">{new Date(e.createdAt).toLocaleDateString()}</td>
-                      <td><span className="badge badge-success badge-sm">posted</span></td>
+                      <td>
+                        <span className={`badge badge-sm ${getBadgeClass(e.status)}`}>
+                          {e.status || "posted"}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

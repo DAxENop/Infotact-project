@@ -1,4 +1,5 @@
 import axios from "axios";
+import { io } from "socket.io-client";
 
 const api = axios.create({ baseURL: "" });
 
@@ -28,6 +29,12 @@ export const authAPI = {
 export const ledgerAPI = {
   list: (page = 1, limit = 20) => api.get(`/ledger/entries?page=${page}&limit=${limit}`),
   create: (data) => api.post("/ledger/entries", data),
+  stats: () => api.get("/ledger/stats"),
 };
+
+// Socket.io — connects to same host as API
+export const socket = io({
+  autoConnect: false,
+});
 
 export default api;
