@@ -1,15 +1,17 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
+import { AuthProvider } from "@/context/AuthContext";
+import { ToastProvider } from "@/components/ui/toast";
 import App from "./App";
-
-import "./styles/dashboard.css";
-import "./styles/login.css";
-import "./styles/ledger.css";
-import "./styles/modal.css";
+import "./styles/globals.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <BrowserRouter>
-    <App />
+    <AuthProvider>
+      <ToastProvider>
+        <App />
+      </ToastProvider>
+    </AuthProvider>
   </BrowserRouter>
 );
