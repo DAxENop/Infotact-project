@@ -31,11 +31,9 @@ const createConnection = async (tenantId,mongoUri,options = {}) => {
 };
 
 const getConnection = (tenantId) => {
-  const connection = connections.get(tenantId);
-  if (connection) {
-    cache.get(tenantId);
-  }
-  return connection;
+  // ponytail: cache.get updates LRU age so dispose fires on eviction
+  cache.get(tenantId);
+  return connections.get(tenantId) || null;
 };
 
 const closeConnection = async (tenantId) => {

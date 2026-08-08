@@ -1,10 +1,12 @@
 const { withTenantConnection } = require("../db/connectionManager");
 const {getLedgerModel} = require("../models/ledger");
 const {acquireLock,releaseLock} = require("./redislock");
+
 const getTenantDbUri = (tenantId) => {
-    const safeTenantId = tenantId.toUpperCase().replace(/[^A-Z0-9_]/g, "_");
-    return process.env[`DB_URI_${safeTenantId}`];
+  const safeTenantId = tenantId.toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+  return process.env[`DB_URI_${safeTenantId}`];
 };
+
 const createLedgerEntry = async ({tenant,entryId,amount,meta}) => {
   const lockKey = `ledger:${tenant}:${entryId}`;
   const { acquired, token } = await acquireLock(lockKey);
@@ -41,6 +43,24 @@ const createLedgerEntry = async ({tenant,entryId,amount,meta}) => {
     throw error;
   }
 };
-module.exports = {
-  createLedgerEntry,
+
+const listLedgerEntries = async (tenantId, { page, limit }) => {
+  const tenantDbUri = getTenantDbUri(tenantId);
+  if (!tenantDbUri) {
+    return {success: false,statusCode: 500,data: {error: "Tenant DB is not configured"}};
+  }
+
+  const result = await withTenantConnection(tenantId, tenantDbUri, async (connection) => {
+    const Ledger = getLedgerModel(connection);
+    const skip = (page - 1) * limit;
+    const [entries, total] = await Promise.all([
+      Ledger.find({ tenant: tenantId }).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      Ledger.countDocuments({ tenant: tenantId }),
+    ]);
+    return { entries, total, page, limit, pages: Math.ceil(total / limit) };
+  });
+
+  return { success: true, statusCode: 200, data: result };
 };
+
+module.exports = { createLedgerEntry, listLedgerEntries };
