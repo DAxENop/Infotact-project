@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import DOMPurify from "dompurify";
 import { ledgerAPI } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import { Plus, Search, ChevronLeft, ChevronRight } from "lucide-react";
@@ -32,7 +33,7 @@ export default function Ledger() {
   useEffect(() => { fetchEntries(1); setPage(1); }, []);
 
   const filtered = entries.filter(
-    (e) => e.entryId.toLowerCase().includes(search.toLowerCase()) || e.amount.toString().includes(search)
+    (e) => e.entryId.toLowerCase().includes(DOMPurify.sanitize(search).toLowerCase()) || e.amount.toString().includes(search)
   );
 
   const handleAdd = async (e) => {
@@ -42,14 +43,15 @@ export default function Ledger() {
       let parsedMeta = {};
       if (form.meta.trim()) {
         try {
-          parsedMeta = JSON.parse(form.meta);
+          const sanitized = DOMPurify.sanitize(form.meta);
+          parsedMeta = JSON.parse(sanitized);
         } catch {
           toast("Invalid JSON in metadata field", "error");
           setSubmitting(false);
           return;
         }
       }
-      const payload = { entryId: form.entryId, amount: parseFloat(form.amount), meta: parsedMeta };
+      const payload = { entryId: DOMPurify.sanitize(form.entryId), amount: parseFloat(form.amount), meta: parsedMeta };
       const res = await ledgerAPI.create(payload);
       toast(res.data.status === "exists" ? "Entry already exists (idempotent)" : "Entry created");
       setShowAdd(false);

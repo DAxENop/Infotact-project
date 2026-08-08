@@ -1,6 +1,7 @@
 const { withTenantConnection } = require("../db/connectionManager");
 const { getLedgerModel } = require("../models/ledger");
 const { acquireLock, releaseLock } = require("./redislock");
+const { runInWorker } = require("./workerPool");
 
 const getTenantDbUri = (tenantId) => {
   const safeTenantId = tenantId.toUpperCase().replace(/[^A-Z0-9_]/g, "_");
@@ -69,60 +70,68 @@ const getTenantStats = async (tenantId) => {
     return { success: false, statusCode: 500, data: { error: "Tenant DB is not configured" } };
   }
 
-  const result = await withTenantConnection(tenantId, tenantDbUri, async (connection) => {
-    const Ledger = getLedgerModel(connection);
-
+  try {
+    // Offload aggregation to worker thread to keep main event loop unblocked
     const [summary, byDay, byStatus] = await Promise.all([
-      // Total, count, avg
-      Ledger.aggregate([
-        { $match: { tenant: tenantId } },
-        {
-          $group: {
-            _id: null,
-            total: { $sum: "$amount" },
-            count: { $sum: 1 },
-            avg: { $avg: "$amount" },
-          },
-        },
-      ]),
-      // Last 30 days grouped by date
-      Ledger.aggregate([
-        {
-          $match: {
-            tenant: tenantId,
-            createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
-          },
-        },
-        {
-          $group: {
-            _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-            total: { $sum: "$amount" },
-            count: { $sum: 1 },
-          },
-        },
-        { $sort: { _id: 1 } },
-      ]),
-      // By status breakdown
-      Ledger.aggregate([
-        { $match: { tenant: tenantId } },
-        {
-          $group: {
-            _id: "$status",
-            count: { $sum: 1 },
-            total: { $sum: "$amount" },
-          },
-        },
-      ]),
+      runInWorker({
+        uri: tenantDbUri,
+        tenant: tenantId,
+        pipeline: [
+          { $match: { tenant: tenantId } },
+          { $group: { _id: null, total: { $sum: "$amount" }, count: { $sum: 1 }, avg: { $avg: "$amount" } } },
+        ],
+      }),
+      runInWorker({
+        uri: tenantDbUri,
+        tenant: tenantId,
+        pipeline: [
+          { $match: { tenant: tenantId, createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } } },
+          { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, total: { $sum: "$amount" }, count: { $sum: 1 } } },
+          { $sort: { _id: 1 } },
+        ],
+      }),
+      runInWorker({
+        uri: tenantDbUri,
+        tenant: tenantId,
+        pipeline: [
+          { $match: { tenant: tenantId } },
+          { $group: { _id: "$status", count: { $sum: 1 }, total: { $sum: "$amount" } } },
+        ],
+      }),
     ]);
 
     return {
-      summary: summary[0] || { total: 0, count: 0, avg: 0 },
-      byDay,
-      byStatus,
+      success: true,
+      statusCode: 200,
+      data: {
+        summary: summary[0] || { total: 0, count: 0, avg: 0 },
+        byDay,
+        byStatus,
+      },
     };
-  });
-
-  return { success: true, statusCode: 200, data: result };
+  } catch (error) {
+    // Fallback: run on main thread if worker fails
+    const result = await withTenantConnection(tenantId, tenantDbUri, async (connection) => {
+      const Ledger = getLedgerModel(connection);
+      const [summary, byDay, byStatus] = await Promise.all([
+        Ledger.aggregate([
+          { $match: { tenant: tenantId } },
+          { $group: { _id: null, total: { $sum: "$amount" }, count: { $sum: 1 }, avg: { $avg: "$amount" } } },
+        ]),
+        Ledger.aggregate([
+          { $match: { tenant: tenantId, createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } } },
+          { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, total: { $sum: "$amount" }, count: { $sum: 1 } } },
+          { $sort: { _id: 1 } },
+        ]),
+        Ledger.aggregate([
+          { $match: { tenant: tenantId } },
+          { $group: { _id: "$status", count: { $sum: 1 }, total: { $sum: "$amount" } } },
+        ]),
+      ]);
+      return { summary: summary[0] || { total: 0, count: 0, avg: 0 }, byDay, byStatus };
+    });
+    return { success: true, statusCode: 200, data: result };
+  }
 };
 
 module.exports = { createLedgerEntry, listLedgerEntries, getTenantStats };

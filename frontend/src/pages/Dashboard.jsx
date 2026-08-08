@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { ledgerAPI, socket } from "@/lib/api";
 import { DollarSign, Receipt, Activity, Database } from "lucide-react";
 import {
@@ -26,6 +26,46 @@ const STATUS_COLORS = {
   pending: { bg: "bg-warning/10", text: "text-warning", hex: "rgb(245, 158, 11)" },
   failed: { bg: "bg-error/10", text: "text-error", hex: "rgb(239, 68, 68)" },
 };
+
+// RequestAnimationFrame-based animated counter for smooth number transitions
+function useAnimatedNumber(target, duration = 600) {
+  const [display, setDisplay] = useState(0);
+  const rafRef = useRef(null);
+  const startRef = useRef(null);
+  const fromRef = useRef(0);
+
+  useEffect(() => {
+    fromRef.current = display;
+    startRef.current = null;
+    const animate = (ts) => {
+      if (!startRef.current) startRef.current = ts;
+      const progress = Math.min((ts - startRef.current) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+      const current = fromRef.current + (target - fromRef.current) * eased;
+      setDisplay(current);
+      if (progress < 1) rafRef.current = requestAnimationFrame(animate);
+    };
+    rafRef.current = requestAnimationFrame(animate);
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, [target, duration]);
+
+  return display;
+}
+
+function StatCard({ title, value, icon: Icon, accent, bg, isNumber }) {
+  const animated = useAnimatedNumber(isNumber ? value : 0);
+  return (
+    <div className="stat bg-base-100 rounded-box border border-base-300">
+      <div className={`stat-figure ${accent}`}>
+        <div className={`h-10 w-10 rounded-lg ${bg} flex items-center justify-center`}>
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+      <div className="stat-title">{title}</div>
+      <div className="stat-value text-2xl">{isNumber ? animated.toLocaleString() : value}</div>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
@@ -203,15 +243,7 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map((c) => (
-          <div key={c.title} className="stat bg-base-100 rounded-box border border-base-300">
-            <div className={`stat-figure ${c.accent}`}>
-              <div className={`h-10 w-10 rounded-lg ${c.bg} flex items-center justify-center`}>
-                <c.icon className="h-5 w-5" />
-              </div>
-            </div>
-            <div className="stat-title">{c.title}</div>
-            <div className="stat-value text-2xl">{loading ? "—" : c.value}</div>
-          </div>
+          <StatCard key={c.title} {...c} isNumber={typeof c.value === "number"} />
         ))}
       </div>
 

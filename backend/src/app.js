@@ -5,6 +5,7 @@ const { rateLimit } = require("express-rate-limit");
 const mongoose = require("mongoose");
 const { Server } = require("socket.io");
 const config = require("./config");
+const { traceMiddleware, getRecentTraces, getTraceStats } = require("./middleware/trace");
 const tenantJwt = require("./middleware/tenantJwt");
 const authRoutes = require("./routes/auth");
 const ledgerRoutes = require("./routes/ledger");
@@ -23,10 +24,14 @@ app.use(helmet());
 app.use(cors({ origin: config.CORS_ORIGIN }));
 app.use(limiter);
 app.use(express.json());
+app.use(traceMiddleware);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
+
+app.get("/trace/recent", getRecentTraces);
+app.get("/trace/stats", getTraceStats);
 
 app.use("/auth", authRoutes);
 app.use("/ledger", tenantJwt, ledgerRoutes);

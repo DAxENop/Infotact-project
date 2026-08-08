@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
+    "bench": "node src/benchmarks/query-perf.js",
     "test": "echo \"No tests configured yet\""
   },
   "keywords": [],
