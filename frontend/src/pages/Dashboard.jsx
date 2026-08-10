@@ -25,7 +25,6 @@ ChartJS.register(
 
 const STATUS_COLORS = {
   posted: { bg: "bg-success/10", text: "text-success", hex: "rgb(16, 185, 129)" },
-  success: { bg: "bg-success/10", text: "text-success", hex: "rgb(34, 197, 94)" },
   pending: { bg: "bg-warning/10", text: "text-warning", hex: "rgb(245, 158, 11)" },
   failed: { bg: "bg-error/10", text: "text-error", hex: "rgb(239, 68, 68)" },
 };
@@ -162,7 +161,7 @@ export default function Dashboard() {
   });
   const labels = Object.keys(byDate).slice(-7);
 
-  const statusKeys = ["posted", "success", "pending", "failed"];
+  const statusKeys = ["posted", "pending", "failed"];
   const barData = {
     labels,
     datasets: statusKeys.map((st) => ({

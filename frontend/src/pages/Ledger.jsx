@@ -198,7 +198,6 @@ export default function Ledger() {
                     <select className="select select-bordered w-full" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
                       <option value="posted">Posted</option>
                       <option value="pending">Pending</option>
-                      <option value="success">Success</option>
                       <option value="failed">Failed</option>
                     </select>
                   </div>

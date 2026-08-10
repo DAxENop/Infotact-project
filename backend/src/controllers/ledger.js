@@ -9,7 +9,7 @@ const create = async (req, res) => {
     }
 
     const { entryId, amount, meta, status } = req.body;
-    const validStatuses = ["pending", "posted", "success", "failed"];
+    const validStatuses = ["pending", "posted", "failed"];
     const entryStatus = validStatuses.includes(status) ? status : "posted";
     const parsedData = createLedgerEntrySchema.safeParse({ entryId, amount, meta });
     if (!parsedData.success) {
