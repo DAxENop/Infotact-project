@@ -174,8 +174,8 @@ export default function Ledger() {
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
             onClick={() => setShowAdd(false)}
           >
-            <SlideUp>
-              <div className="modal-box border border-base-300 bg-base-100" onClick={(e) => e.stopPropagation()}>
+            <SlideUp className="w-full max-w-md">
+              <div className="rounded-xl border border-base-300 bg-base-100 p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
                 <h3 className="font-bold text-lg">Add Ledger Entry</h3>
                 <p className="text-base-content/50 text-sm py-2">Create a new billing transaction entry</p>
 
@@ -202,7 +202,7 @@ export default function Ledger() {
                       <option value="failed">Failed</option>
                     </select>
                   </div>
-                  <div className="modal-action">
+                  <div className="flex justify-end gap-2 mt-6">
                     <button type="button" className="btn" onClick={() => setShowAdd(false)}>Cancel</button>
                     <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.97 }} type="submit" className={`btn btn-primary ${submitting ? "loading" : ""}`}>
                       {submitting ? "Creating..." : "Create Entry"}
