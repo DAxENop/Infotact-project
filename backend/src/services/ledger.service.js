@@ -8,7 +8,7 @@ const getTenantDbUri = (tenantId) => {
   return process.env[`DB_URI_${safeTenantId}`];
 };
 
-const createLedgerEntry = async ({ tenant, entryId, amount, meta }) => {
+const createLedgerEntry = async ({ tenant, entryId, amount, meta, status }) => {
   const lockKey = `ledger:${tenant}:${entryId}`;
   const { acquired, token } = await acquireLock(lockKey);
   if (!acquired) {
@@ -28,7 +28,7 @@ const createLedgerEntry = async ({ tenant, entryId, amount, meta }) => {
         if (existingEntry) {
           return { status: "exists" };
         }
-        const ledgerEntry = new Ledger({ tenant, entryId, amount, meta });
+        const ledgerEntry = new Ledger({ tenant, entryId, amount, meta, status });
         await ledgerEntry.save();
         return { status: "created", doc: ledgerEntry };
       }
