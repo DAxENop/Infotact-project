@@ -134,4 +134,32 @@ const getTenantStats = async (tenantId) => {
   }
 };
 
-module.exports = { createLedgerEntry, listLedgerEntries, getTenantStats };
+const updateEntryStatus = async (tenantId, entryId, newStatus) => {
+  const validStatuses = ["pending", "posted", "failed"];
+  if (!validStatuses.includes(newStatus)) {
+    return { success: false, statusCode: 400, data: { error: "Invalid status" } };
+  }
+
+  const tenantDbUri = getTenantDbUri(tenantId);
+  if (!tenantDbUri) {
+    return { success: false, statusCode: 500, data: { error: "Tenant DB is not configured" } };
+  }
+
+  const result = await withTenantConnection(tenantId, tenantDbUri, async (connection) => {
+    const Ledger = getLedgerModel(connection);
+    const doc = await Ledger.findOneAndUpdate(
+      { tenant: tenantId, entryId },
+      { status: newStatus },
+      { new: true }
+    ).lean();
+    if (!doc) return { error: "Entry not found" };
+    return { doc };
+  });
+
+  if (result.error) {
+    return { success: false, statusCode: 404, data: { error: result.error } };
+  }
+  return { success: true, statusCode: 200, data: result };
+};
+
+module.exports = { createLedgerEntry, listLedgerEntries, getTenantStats, updateEntryStatus };

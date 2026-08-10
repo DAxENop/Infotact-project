@@ -1,5 +1,5 @@
 const { createLedgerEntrySchema } = require("../validators/ledger.validator");
-const { createLedgerEntry, listLedgerEntries, getTenantStats } = require("../services/ledger.service");
+const { createLedgerEntry, listLedgerEntries, getTenantStats, updateEntryStatus } = require("../services/ledger.service");
 
 const create = async (req, res) => {
   try {
@@ -72,4 +72,33 @@ const stats = async (req, res) => {
   }
 };
 
-module.exports = { create, list, stats };
+const updateStatus = async (req, res) => {
+  try {
+    const tenantId = req.tenant?.id;
+    if (!tenantId) {
+      return res.status(400).json({ error: "Tenant missing" });
+    }
+
+    const { id } = req.params;
+    const { status } = req.body;
+    if (!status) {
+      return res.status(400).json({ error: "Status is required" });
+    }
+
+    const result = await updateEntryStatus(tenantId, id, status);
+
+    if (result.success && result.data?.doc) {
+      const io = req.app.get("io");
+      if (io) {
+        io.to(tenantId).emit("ledger:updated", result.data.doc);
+      }
+    }
+
+    return res.status(result.statusCode).json(result.data);
+  } catch (error) {
+    console.error("[LEDGER] Update status error:", error.message);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+module.exports = { create, list, stats, updateStatus };

@@ -16,6 +16,7 @@ export default function Ledger() {
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ entryId: "", amount: "", meta: "", status: "posted" });
   const [submitting, setSubmitting] = useState(false);
+  const [updatingId, setUpdatingId] = useState(null);
   const toast = useToast();
 
   const fetchEntries = async (p = page) => {
@@ -63,6 +64,19 @@ export default function Ledger() {
       toast(err.response?.data?.error || "Failed to create entry", "error");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleStatusChange = async (entryId, newStatus) => {
+    setUpdatingId(entryId);
+    try {
+      await ledgerAPI.updateStatus(entryId, newStatus);
+      setEntries((prev) => prev.map((e) => (e.entryId === entryId ? { ...e, status: newStatus } : e)));
+      toast(`Status updated to "${newStatus}"`);
+    } catch (err) {
+      toast(err.response?.data?.error || "Failed to update status", "error");
+    } finally {
+      setUpdatingId(null);
     }
   };
 
@@ -132,14 +146,16 @@ export default function Ledger() {
                           <td className="font-semibold">${e.amount.toFixed(2)}</td>
                           <td className="text-base-content/50">{new Date(e.createdAt).toLocaleDateString()}</td>
                           <td>
-                            <motion.span
-                              key={e.status}
-                              initial={{ scale: 0.8, opacity: 0 }}
-                              animate={{ scale: 1, opacity: 1 }}
-                              className={`badge badge-sm ${getBadgeClass(e.status)}`}
+                            <select
+                              className={`select select-bordered select-xs ${getBadgeClass(e.status)} border-0 cursor-pointer`}
+                              value={e.status || "posted"}
+                              disabled={updatingId === e.entryId}
+                              onChange={(ev) => handleStatusChange(e.entryId, ev.target.value)}
                             >
-                              {e.status || "posted"}
-                            </motion.span>
+                              <option value="posted">posted</option>
+                              <option value="pending">pending</option>
+                              <option value="failed">failed</option>
+                            </select>
                           </td>
                         </motion.tr>
                       ))}

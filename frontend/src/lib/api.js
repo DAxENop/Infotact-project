@@ -30,6 +30,7 @@ export const ledgerAPI = {
   list: (page = 1, limit = 20) => api.get(`/ledger/entries?page=${page}&limit=${limit}`),
   create: (data) => api.post("/ledger/entries", data),
   stats: () => api.get("/ledger/stats"),
+  updateStatus: (id, status) => api.patch(`/ledger/entries/${id}/status`, { status }),
 };
 
 // Socket.io — connects to same host as API
