@@ -1,12 +1,21 @@
-import { useState, useEffect } from "react";
-import DOMPurify from "dompurify";
+import { useState, useEffect, useCallback } from "react";
 import { ledgerAPI } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/components/ui/toast";
+import { useTenantSocket } from "@/hooks/useTenantSocket";
 import { Plus, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FadeIn, StaggerChildren, StaggerItem, SlideUp } from "@/components/Motion";
+import { FadeIn } from "@/components/Motion";
+
+const STATUS_COLORS = {
+  posted: { bg: "bg-success/10", text: "text-success", dot: "bg-success" },
+  pending: { bg: "bg-warning/10", text: "text-warning", dot: "bg-warning" },
+  failed: { bg: "bg-error/10", text: "text-error", dot: "bg-error" },
+  processing: { bg: "bg-info/10", text: "text-info", dot: "bg-info" },
+};
 
 export default function Ledger() {
+  const { tenantId, token } = useAuth();
   const [entries, setEntries] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -14,12 +23,13 @@ export default function Ledger() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ entryId: "", amount: "", meta: "", status: "posted" });
+  const [form, setForm] = useState({ entryId: "", amount: "", status: "posted", meta: "" });
   const [submitting, setSubmitting] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
   const toast = useToast();
 
-  const fetchEntries = async (p = page) => {
+  const fetchEntries = useCallback(async (p = page) => {
+    if (!token) return;
     setLoading(true);
     try {
       const res = await ledgerAPI.list(p, 10);
@@ -31,12 +41,26 @@ export default function Ledger() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, page, toast]);
 
-  useEffect(() => { fetchEntries(1); setPage(1); }, []);
+  useEffect(() => { if (token) { fetchEntries(1); setPage(1); } }, [token]);
+
+  const handleSocketCreated = useCallback((doc) => {
+    setEntries((prev) => {
+      if (prev.some((e) => e._id === doc._id)) return prev;
+      return [doc, ...prev].slice(0, 100);
+    });
+    setTotal((prev) => prev + 1);
+  }, []);
+
+  const handleSocketUpdated = useCallback((doc) => {
+    setEntries((prev) => prev.map((e) => (e._id === doc._id ? { ...e, ...doc } : e)));
+  }, []);
+
+  useTenantSocket(handleSocketCreated, handleSocketUpdated);
 
   const filtered = entries.filter(
-    (e) => e.entryId.toLowerCase().includes(DOMPurify.sanitize(search).toLowerCase()) || e.amount.toString().includes(search)
+    (e) => e.entryId.toLowerCase().includes(search.toLowerCase()) || e.amount.toString().includes(search)
   );
 
   const handleAdd = async (e) => {
@@ -46,19 +70,18 @@ export default function Ledger() {
       let parsedMeta = {};
       if (form.meta.trim()) {
         try {
-          const sanitized = DOMPurify.sanitize(form.meta);
-          parsedMeta = JSON.parse(sanitized);
+          parsedMeta = JSON.parse(form.meta);
         } catch {
           toast("Invalid JSON in metadata field", "error");
           setSubmitting(false);
           return;
         }
       }
-      const payload = { entryId: DOMPurify.sanitize(form.entryId), amount: parseFloat(form.amount), meta: parsedMeta, status: form.status };
+      const payload = { entryId: form.entryId, amount: parseFloat(form.amount), status: form.status, meta: parsedMeta };
       const res = await ledgerAPI.create(payload);
       toast(res.data.status === "exists" ? "Entry already exists (idempotent)" : "Entry created");
       setShowAdd(false);
-      setForm({ entryId: "", amount: "", meta: "", status: "posted" });
+      setForm({ entryId: "", amount: "", status: "posted", meta: "" });
       fetchEntries();
     } catch (err) {
       toast(err.response?.data?.error || "Failed to create entry", "error");
@@ -80,30 +103,24 @@ export default function Ledger() {
     }
   };
 
-  const getBadgeClass = (status) => {
-    if (status === "failed") return "badge-error";
-    if (status === "pending") return "badge-warning";
-    return "badge-success";
+  const getStatusStyle = (status) => {
+    return STATUS_COLORS[status] || STATUS_COLORS.posted;
   };
 
   return (
     <div className="space-y-6">
-      <FadeIn>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Billing Ledger</h1>
-            <p className="text-base-content/50 text-sm">{total} total entries</p>
-          </div>
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.97 }}
-            className="btn btn-primary gap-2"
-            onClick={() => setShowAdd(true)}
-          >
-            <Plus className="h-4 w-4" /> Add Entry
-          </motion.button>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Billing Ledger</h1>
+          <p className="text-base-content/50 text-sm">
+            {total} total entries
+            {tenantId && <span className="badge badge-sm badge-outline ml-2">{tenantId}</span>}
+          </p>
         </div>
-      </FadeIn>
+        <button className="btn btn-primary gap-2" onClick={() => setShowAdd(true)}>
+          <Plus className="h-4 w-4" /> Add Entry
+        </button>
+      </div>
 
       <FadeIn delay={0.1}>
         <div className="card bg-base-100 border border-base-300">
@@ -146,16 +163,21 @@ export default function Ledger() {
                           <td className="font-semibold">${e.amount.toFixed(2)}</td>
                           <td className="text-base-content/50">{new Date(e.createdAt).toLocaleDateString()}</td>
                           <td>
-                            <select
-                              className={`select select-bordered select-xs ${getBadgeClass(e.status)} border-0 cursor-pointer`}
-                              value={e.status || "posted"}
-                              disabled={updatingId === e.entryId}
-                              onChange={(ev) => handleStatusChange(e.entryId, ev.target.value)}
-                            >
-                              <option value="posted">posted</option>
-                              <option value="pending">pending</option>
-                              <option value="failed">failed</option>
-                            </select>
+                            <div className="relative inline-block">
+                              <select
+                                className={`appearance-none cursor-pointer rounded-full pl-5 pr-3 py-1 text-xs font-semibold border-0 ${getStatusStyle(e.status).bg} ${getStatusStyle(e.status).text} transition-colors`}
+                                value={e.status || "posted"}
+                                disabled={updatingId === e.entryId}
+                                onChange={(ev) => handleStatusChange(e.entryId, ev.target.value)}
+                                style={{ backgroundImage: "none" }}
+                              >
+                                <option value="posted">posted</option>
+                                <option value="pending">pending</option>
+                                <option value="processing">processing</option>
+                                <option value="failed">failed</option>
+                              </select>
+                              <span className={`absolute left-2 top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full ${getStatusStyle(e.status).dot} pointer-events-none`}></span>
+                            </div>
                           </td>
                         </motion.tr>
                       ))}
@@ -190,8 +212,15 @@ export default function Ledger() {
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
             onClick={() => setShowAdd(false)}
           >
-            <SlideUp className="w-full max-w-md">
-              <div className="rounded-xl border border-base-300 bg-base-100 p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              className="w-full max-w-md"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="rounded-xl border border-base-300 bg-base-100 p-6 shadow-2xl">
                 <h3 className="font-bold text-lg">Add Ledger Entry</h3>
                 <p className="text-base-content/50 text-sm py-2">Create a new billing transaction entry</p>
 
@@ -206,26 +235,27 @@ export default function Ledger() {
                     <input type="number" step="0.01" min="0.01" placeholder="99.99" className="input input-bordered w-full" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
                   </div>
                   <div className="form-control">
-                    <label className="label"><span className="label-text font-medium">Metadata (JSON, optional)</span></label>
-                    <input type="text" placeholder='{"description": "Monthly fee"}' className="input input-bordered w-full" value={form.meta} onChange={(e) => setForm({ ...form, meta: e.target.value })} />
-                  </div>
-                  <div className="form-control">
                     <label className="label"><span className="label-text font-medium">Status</span></label>
                     <select className="select select-bordered w-full" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
                       <option value="posted">Posted</option>
                       <option value="pending">Pending</option>
+                      <option value="processing">Processing</option>
                       <option value="failed">Failed</option>
                     </select>
                   </div>
-                  <div className="flex justify-end gap-2 mt-6">
+                  <div className="form-control">
+                    <label className="label"><span className="label-text font-medium">Metadata (JSON, optional)</span></label>
+                    <input type="text" placeholder='{"description": "Monthly fee"}' className="input input-bordered w-full" value={form.meta} onChange={(e) => setForm({ ...form, meta: e.target.value })} />
+                  </div>
+                  <div className="flex justify-end gap-2 mt-4">
                     <button type="button" className="btn" onClick={() => setShowAdd(false)}>Cancel</button>
-                    <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.97 }} type="submit" className={`btn btn-primary ${submitting ? "loading" : ""}`}>
+                    <button type="submit" className={`btn btn-primary ${submitting ? "loading" : ""}`}>
                       {submitting ? "Creating..." : "Create Entry"}
-                    </motion.button>
+                    </button>
                   </div>
                 </form>
               </div>
-            </SlideUp>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

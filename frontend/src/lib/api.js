@@ -13,9 +13,12 @@ api.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.response?.status === 401) {
+      const hadToken = !!localStorage.getItem("lg_token");
       localStorage.removeItem("lg_token");
       localStorage.removeItem("lg_user");
-      window.location.href = "/";
+      if (hadToken && window.location.pathname !== "/") {
+        window.location.replace("/");
+      }
     }
     return Promise.reject(err);
   }
@@ -33,7 +36,6 @@ export const ledgerAPI = {
   updateStatus: (id, status) => api.patch(`/ledger/entries/${id}/status`, { status }),
 };
 
-// Socket.io — connects to same host as API
 export const socket = io({
   autoConnect: false,
 });

@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ledgerAPI, socket } from "@/lib/api";
+import { ledgerAPI } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
+import { useTenantSocket } from "@/hooks/useTenantSocket";
 import { DollarSign, Receipt, Activity, Database } from "lucide-react";
 import { motion } from "framer-motion";
 import { FadeIn, StaggerChildren, StaggerItem, HoverLift } from "@/components/Motion";
@@ -27,6 +29,7 @@ const STATUS_COLORS = {
   posted: { bg: "bg-success/10", text: "text-success", hex: "rgb(16, 185, 129)" },
   pending: { bg: "bg-warning/10", text: "text-warning", hex: "rgb(245, 158, 11)" },
   failed: { bg: "bg-error/10", text: "text-error", hex: "rgb(239, 68, 68)" },
+  processing: { bg: "bg-info/10", text: "text-info", hex: "rgb(59, 130, 246)" },
 };
 
 function useAnimatedNumber(target, duration = 600) {
@@ -71,6 +74,7 @@ function StatCard({ title, value, icon: Icon, accent, bg, isNumber }) {
 }
 
 export default function Dashboard() {
+  const { token } = useAuth();
   const [stats, setStats] = useState(null);
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -78,6 +82,7 @@ export default function Dashboard() {
   const [dateRange, setDateRange] = useState("30d");
 
   const fetchData = useCallback(async () => {
+    if (!token) return;
     setLoading(true);
     setError(null);
     try {
@@ -92,27 +97,21 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [token]);
 
-  useEffect(() => {
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleSocketCreated = useCallback((doc) => {
+    setEntries((prev) => [doc, ...prev].slice(0, 100));
     fetchData();
-
-    const user = JSON.parse(localStorage.getItem("lg_user") || "{}");
-    if (user.tenant) {
-      socket.connect();
-      socket.emit("join", user.tenant);
-    }
-
-    const onLedgerCreated = (doc) => {
-      setEntries((prev) => [doc, ...prev].slice(0, 100));
-    };
-    socket.on("ledger:created", onLedgerCreated);
-
-    return () => {
-      socket.off("ledger:created", onLedgerCreated);
-      socket.disconnect();
-    };
   }, [fetchData]);
+
+  const handleSocketUpdated = useCallback((doc) => {
+    setEntries((prev) => prev.map((e) => (e._id === doc._id ? { ...e, ...doc } : e)));
+    fetchData();
+  }, [fetchData]);
+
+  useTenantSocket(handleSocketCreated, handleSocketUpdated);
 
   const filterByRange = useCallback((range) => {
     const now = Date.now();
@@ -136,12 +135,12 @@ export default function Dashboard() {
     });
   }
 
-  const successCount = statusMap.success?.count || 0;
   const pendingCount = statusMap.pending?.count || 0;
   const failedCount = statusMap.failed?.count || 0;
   const postedCount = statusMap.posted?.count || 0;
-  const totalCount = successCount + pendingCount + failedCount + postedCount;
-  const successRate = totalCount ? ((successCount + postedCount) / totalCount * 100).toFixed(0) : 0;
+  const processingCount = statusMap.processing?.count || 0;
+  const totalCount = pendingCount + failedCount + postedCount + processingCount;
+  const successRate = totalCount ? ((postedCount + processingCount) / totalCount * 100).toFixed(0) : 0;
 
   const statCards = [
     { title: "Total Revenue", value: `$${totalRevenue.toLocaleString()}`, icon: DollarSign, accent: "text-success", bg: "bg-success/10" },
@@ -161,7 +160,7 @@ export default function Dashboard() {
   });
   const labels = Object.keys(byDate).slice(-7);
 
-  const statusKeys = ["posted", "pending", "failed"];
+  const statusKeys = ["posted", "pending", "processing", "failed"];
   const barData = {
     labels,
     datasets: statusKeys.map((st) => ({
@@ -176,7 +175,7 @@ export default function Dashboard() {
     labels,
     datasets: [{
       label: "Revenue",
-      data: labels.map((l) => byDate[l].total),
+      data: labels.map((l) => byDate[l]?.total || 0),
       fill: true,
       borderColor: "rgb(16, 185, 129)",
       backgroundColor: "rgba(16, 185, 129, 0.08)",
@@ -215,9 +214,9 @@ export default function Dashboard() {
     cutout: "60%",
   };
 
-  const getBadgeClass = (status) => {
+  const getStatusStyle = (status) => {
     const s = STATUS_COLORS[status] || STATUS_COLORS.posted;
-    return `${s.bg} ${s.text}`;
+    return s;
   };
 
   return (
@@ -332,7 +331,8 @@ export default function Dashboard() {
                         <td className="font-semibold">${e.amount.toFixed(2)}</td>
                         <td className="text-base-content/50">{new Date(e.createdAt).toLocaleDateString()}</td>
                         <td>
-                          <span className={`badge badge-sm ${getBadgeClass(e.status)}`}>
+                          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${getStatusStyle(e.status).bg} ${getStatusStyle(e.status).text}`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${getStatusStyle(e.status).dot}`}></span>
                             {e.status || "posted"}
                           </span>
                         </td>

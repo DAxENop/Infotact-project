@@ -9,9 +9,7 @@ const create = async (req, res) => {
     }
 
     const { entryId, amount, meta, status } = req.body;
-    const validStatuses = ["pending", "posted", "failed"];
-    const entryStatus = validStatuses.includes(status) ? status : "posted";
-    const parsedData = createLedgerEntrySchema.safeParse({ entryId, amount, meta });
+    const parsedData = createLedgerEntrySchema.safeParse({ entryId, amount, status, meta });
     if (!parsedData.success) {
       return res.status(400).json({ error: "Invalid request payload", issues: parsedData.error.flatten() });
     }
@@ -20,8 +18,8 @@ const create = async (req, res) => {
       tenant: tenantId,
       entryId,
       amount,
+      status: parsedData.data.status,
       meta: parsedData.data.meta,
-      status: entryStatus,
     });
 
     // Emit real-time event to tenant room

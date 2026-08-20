@@ -2,6 +2,9 @@ const { withTenantConnection } = require("../db/connectionManager");
 const { getLedgerModel } = require("../models/ledger");
 const { acquireLock, releaseLock } = require("./redislock");
 const { runInWorker } = require("./workerPool");
+const redis = require("../config/redis");
+
+const STATS_CACHE_TTL = 30; // seconds
 
 const getTenantDbUri = (tenantId) => {
   const safeTenantId = tenantId.toUpperCase().replace(/[^A-Z0-9_]/g, "_");
@@ -28,7 +31,7 @@ const createLedgerEntry = async ({ tenant, entryId, amount, meta, status }) => {
         if (existingEntry) {
           return { status: "exists" };
         }
-        const ledgerEntry = new Ledger({ tenant, entryId, amount, meta, status });
+        const ledgerEntry = new Ledger({ tenant, entryId, amount, status, meta });
         await ledgerEntry.save();
         return { status: "created", doc: ledgerEntry };
       }
@@ -70,45 +73,55 @@ const getTenantStats = async (tenantId) => {
     return { success: false, statusCode: 500, data: { error: "Tenant DB is not configured" } };
   }
 
+  const cacheKey = `stats:${tenantId}`;
+
+  // Try Redis cache first
   try {
-    // Offload aggregation to worker thread to keep main event loop unblocked
-    const [summary, byDay, byStatus] = await Promise.all([
-      runInWorker({
-        uri: tenantDbUri,
-        tenant: tenantId,
-        pipeline: [
+    if (redis.status === "ready") {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return { success: true, statusCode: 200, data: JSON.parse(cached) };
+      }
+    }
+  } catch {}
+
+  try {
+    // Single worker call — one connection, three pipelines in parallel
+    const [summary, byDay, byStatus] = await runInWorker({
+      uri: tenantDbUri,
+      tenant: tenantId,
+      pipelines: [
+        [
           { $match: { tenant: tenantId } },
           { $group: { _id: null, total: { $sum: "$amount" }, count: { $sum: 1 }, avg: { $avg: "$amount" } } },
         ],
-      }),
-      runInWorker({
-        uri: tenantDbUri,
-        tenant: tenantId,
-        pipeline: [
+        [
           { $match: { tenant: tenantId, createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } } },
           { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, total: { $sum: "$amount" }, count: { $sum: 1 } } },
           { $sort: { _id: 1 } },
         ],
-      }),
-      runInWorker({
-        uri: tenantDbUri,
-        tenant: tenantId,
-        pipeline: [
+        [
           { $match: { tenant: tenantId } },
+          { $addFields: { status: { $ifNull: ["$status", "posted"] } } },
           { $group: { _id: "$status", count: { $sum: 1 }, total: { $sum: "$amount" } } },
         ],
-      }),
-    ]);
+      ],
+    }, 15000);
 
-    return {
-      success: true,
-      statusCode: 200,
-      data: {
-        summary: summary[0] || { total: 0, count: 0, avg: 0 },
-        byDay,
-        byStatus,
-      },
+    const data = {
+      summary: summary[0] || { total: 0, count: 0, avg: 0 },
+      byDay,
+      byStatus,
     };
+
+    // Cache in Redis for 30s
+    try {
+      if (redis.status === "ready") {
+        await redis.set(cacheKey, JSON.stringify(data), "EX", STATS_CACHE_TTL);
+      }
+    } catch {}
+
+    return { success: true, statusCode: 200, data };
   } catch (error) {
     // Fallback: run on main thread if worker fails
     const result = await withTenantConnection(tenantId, tenantDbUri, async (connection) => {
@@ -125,6 +138,7 @@ const getTenantStats = async (tenantId) => {
         ]),
         Ledger.aggregate([
           { $match: { tenant: tenantId } },
+          { $addFields: { status: { $ifNull: ["$status", "posted"] } } },
           { $group: { _id: "$status", count: { $sum: 1 }, total: { $sum: "$amount" } } },
         ]),
       ]);
@@ -135,7 +149,7 @@ const getTenantStats = async (tenantId) => {
 };
 
 const updateEntryStatus = async (tenantId, entryId, newStatus) => {
-  const validStatuses = ["pending", "posted", "failed"];
+  const validStatuses = ["pending", "posted", "failed", "processing"];
   if (!validStatuses.includes(newStatus)) {
     return { success: false, statusCode: 400, data: { error: "Invalid status" } };
   }

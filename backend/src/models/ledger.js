@@ -9,7 +9,7 @@ const getLedgerModel = (connection) => {
     tenant: {type: String,required: true,index: true},
     entryId: {type: String,required: true},
     amount: {type: Number,required: true},
-    status: {type: String, default: "posted", enum: ["pending", "posted", "failed"]},
+    status: {type: String, enum: ["posted", "pending", "failed", "processing"], default: "posted"},
     meta: {type: Object,default: {}},
     createdAt: {type: Date,default: Date.now},
   });

@@ -4,7 +4,7 @@ const traces = [];
 const MAX_TRACES = 1000;
 
 const traceMiddleware = (req, res, next) => {
-  const traceId = crypto.randomUUID();
+  const traceId = crypto.randomUUID().slice(0, 8);
   const start = performance.now();
 
   req.traceId = traceId;
@@ -26,15 +26,15 @@ const traceMiddleware = (req, res, next) => {
     if (traces.length >= MAX_TRACES) traces.shift();
     traces.push(entry);
 
-    const parts = [
-      `[TRACE] ${entry.timestamp}`,
-      `id=${entry.traceId}`,
-      `${entry.method} ${entry.path}`,
-      `status=${entry.status}`,
-      `duration=${entry.durationMs}ms`,
-    ];
-    if (entry.tenant) parts.push(`tenant=${entry.tenant}`);
-    console.log(parts.join(" "));
+    const methodColors = { GET: "\x1b[36m", POST: "\x1b[32m", PATCH: "\x1b[33m", PUT: "\x1b[34m", DELETE: "\x1b[31m" };
+    const color = methodColors[req.method] || "\x1b[0m";
+    const statusColor = res.statusCode >= 400 ? "\x1b[31m" : "\x1b[32m";
+
+    console.log(
+      `  ${color}${req.method.padEnd(6)}\x1b[0m ${req.originalUrl.padEnd(30)} ` +
+      `${statusColor}${res.statusCode}\x1b[0m ${durationMs}ms ` +
+      `${entry.tenant ? `tenant=${entry.tenant}` : ""}`
+    );
   });
 
   next();
@@ -46,7 +46,7 @@ const getRecentTraces = (_req, res) => {
 
 const getTraceStats = (_req, res) => {
   if (traces.length === 0) {
-    res.json({ count: 0, p50: 0, p95: 0, p99: 0, avg: 0 });
+    res.json({ count: 0, p50: 0, p95: 0, p99: 0, avg: 0, min: 0, max: 0 });
     return;
   }
   const sorted = traces.map((t) => t.durationMs).sort((a, b) => a - b);
@@ -54,6 +54,8 @@ const getTraceStats = (_req, res) => {
   const avg = sorted.reduce((a, b) => a + b, 0) / sorted.length;
   res.json({
     count: sorted.length,
+    min: sorted[0],
+    max: sorted[sorted.length - 1],
     p50: Math.round(p(0.5) * 100) / 100,
     p95: Math.round(p(0.95) * 100) / 100,
     p99: Math.round(p(0.99) * 100) / 100,

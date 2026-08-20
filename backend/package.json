@@ -7,6 +7,7 @@
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
     "bench": "node src/benchmarks/query-perf.js",
+    "seed": "node src/benchmarks/seed.js",
     "test": "echo \"No tests configured yet\""
   },
   "keywords": [],
