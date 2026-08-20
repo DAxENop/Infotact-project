@@ -1,12 +1,12 @@
 /**
  * Offloads heavy aggregation queries to a worker thread.
- * Keeps the main event loop free for sub-5ms API responses.
+ * Single worker, single connection, multiple pipelines.
  */
 
 const { Worker } = require("worker_threads");
 const path = require("path");
 
-const WORKER_PATH = path.join(__dirname, "aggregation.worker.js");
+const WORKER_PATH = path.join(__dirname, "../workers/aggregation.worker.js");
 
 const runInWorker = (payload, timeoutMs = 10000) => {
   return new Promise((resolve, reject) => {
@@ -28,7 +28,8 @@ const runInWorker = (payload, timeoutMs = 10000) => {
       reject(err);
     });
 
-    worker.postMessage({ type: "aggregate", payload });
+    const type = payload.pipelines ? "aggregate-multi" : "aggregate";
+    worker.postMessage({ type, payload });
   });
 };
 

@@ -13,9 +13,12 @@ api.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.response?.status === 401) {
+      const hadToken = !!localStorage.getItem("lg_token");
       localStorage.removeItem("lg_token");
       localStorage.removeItem("lg_user");
-      window.location.href = "/";
+      if (hadToken && window.location.pathname !== "/") {
+        window.location.replace("/");
+      }
     }
     return Promise.reject(err);
   }
@@ -30,9 +33,9 @@ export const ledgerAPI = {
   list: (page = 1, limit = 20) => api.get(`/ledger/entries?page=${page}&limit=${limit}`),
   create: (data) => api.post("/ledger/entries", data),
   stats: () => api.get("/ledger/stats"),
+  updateStatus: (id, status) => api.patch(`/ledger/entries/${id}/status`, { status }),
 };
 
-// Socket.io — connects to same host as API
 export const socket = io({
   autoConnect: false,
 });

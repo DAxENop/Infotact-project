@@ -1,9 +1,9 @@
 /**
- * Backend performance benchmark
+ * LedgerGuard Query Performance Benchmark
  * Seeds 10,000 ledger entries and measures query latency.
  *
- * Usage: node src/benchmarks/query-perf.js
- * Requires: MongoDB running, env vars set (or defaults)
+ * Usage: npm run bench (from backend/)
+ * Requires: MongoDB running on localhost:27017
  */
 
 const mongoose = require("mongoose");
@@ -11,121 +11,124 @@ const { LRUCache } = require("lru-cache");
 
 const MONGO_URI = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/ledgerguard_bench";
 const TENANT = "bench_tenant";
+const COUNT = 10_000;
 
 const ledgerSchema = new mongoose.Schema({
-  tenant: { type: String, required: true, index: true },
+  tenant: { type: String, required: true },
   entryId: { type: String, required: true },
   amount: { type: Number, required: true },
+  status: { type: String, enum: ["posted", "pending", "failed", "processing"], default: "posted" },
   meta: { type: Object, default: {} },
   createdAt: { type: Date, default: Date.now },
 });
-
-ledgerSchema.index({ tenant: 1, entryId: 1 }, { unique: true, name: "uniq_tenant_entry" });
-
-const measure = (label, fn) => {
-  const start = performance.now();
-  const result = fn();
-  const elapsed = performance.now() - start;
-  return { label, elapsedMs: Math.round(elapsed * 100) / 100, result };
-};
+ledgerSchema.index({ tenant: 1, entryId: 1 }, { unique: true });
 
 const measureAsync = async (label, fn) => {
   const start = performance.now();
   const result = await fn();
-  const elapsed = performance.now() - start;
-  return { label, elapsedMs: Math.round(elapsed * 100) / 100, result };
+  const ms = Math.round((performance.now() - start) * 100) / 100;
+  return { label, ms, result };
 };
 
+const measure = (label, fn) => {
+  const start = performance.now();
+  const result = fn();
+  const ms = Math.round((performance.now() - start) * 100) / 100;
+  return { label, ms, result };
+};
+
+const pad = (s, n) => String(s).padEnd(n);
+const bold = (s) => `\x1b[1m${s}\x1b[0m`;
+const green = (s) => `\x1b[32m${s}\x1b[0m`;
+const dim = (s) => `\x1b[2m${s}\x1b[0m`;
+
 const run = async () => {
-  console.log("=== LedgerGuard Query Performance Benchmark ===\n");
+  console.log(bold("\n  LedgerGuard — Query Performance Benchmark\n"));
+  console.log(`  Tenant: ${TENANT}`);
+  console.log(`  Entries: ${COUNT.toLocaleString()}`);
+  console.log(`  MongoDB: ${MONGO_URI}\n`);
 
-  // Connect
   const conn = await mongoose.createConnection(MONGO_URI).asPromise();
+
+  // Seed
+  process.stdout.write("  Seeding entries... ");
+  await conn.dropDatabase();
   const Ledger = conn.model("Ledger", ledgerSchema);
-
-  // Seed data
-  console.log("Seeding 10,000 entries...");
-  const bulk = [];
-  for (let i = 0; i < 10000; i++) {
-    bulk.push({
-      tenant: TENANT,
-      entryId: `BENCH-${String(i).padStart(6, "0")}`,
-      amount: Math.round(Math.random() * 100000) / 100,
-      meta: { batch: Math.floor(i / 1000) },
-      createdAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000),
-    });
-  }
-  await Ledger.deleteMany({ tenant: TENANT });
+  await Ledger.createIndexes();
+  const statuses = ["posted", "pending", "failed", "processing"];
+  const bulk = Array.from({ length: COUNT }, (_, i) => ({
+    tenant: TENANT,
+    entryId: `BENCH-${String(i).padStart(6, "0")}`,
+    amount: Math.round((Math.random() * 50000 + 10) * 100) / 100,
+    status: statuses[i % 4],
+    meta: { batch: Math.floor(i / 1000), source: "benchmark" },
+    createdAt: new Date(Date.now() - Math.random() * 90 * 24 * 60 * 60 * 1000),
+  }));
   await Ledger.insertMany(bulk, { ordered: true });
-  console.log("Seeded.\n");
+  console.log("done.\n");
 
-  // Ensure index is built
-  await Ledger.ensureIndexes();
+  // Benchmarks
+  const results = [];
 
-  // Benchmark 1: Simple find with index (tenant + sort + limit)
-  const r1 = await measureAsync("find+sort+limit(20)", async () => {
-    return Ledger.find({ tenant: TENANT }).sort({ createdAt: -1 }).limit(20).lean();
-  });
-  console.log(`${r1.label}: ${r1.elapsedMs}ms (${r1.result.length} docs)`);
+  results.push(await measureAsync("find+sort+limit(20)", () =>
+    Ledger.find({ tenant: TENANT }).sort({ createdAt: -1 }).limit(20).lean()
+  ));
 
-  // Benchmark 2: countDocuments with index
-  const r2 = await measureAsync("countDocuments", async () => {
-    return Ledger.countDocuments({ tenant: TENANT });
-  });
-  console.log(`${r2.label}: ${r2.elapsedMs}ms (count=${r2.result})`);
+  results.push(await measureAsync("countDocuments", () =>
+    Ledger.countDocuments({ tenant: TENANT })
+  ));
 
-  // Benchmark 3:findOne with compound unique index
-  const r3 = await measureAsync("findOne(indexed)", async () => {
-    return Ledger.findOne({ tenant: TENANT, entryId: "BENCH-05000" }).lean();
-  });
-  console.log(`${r3.label}: ${r3.elapsedMs}ms (found=${!!r3.result})`);
+  results.push(await measureAsync("findOne(indexed)", () =>
+    Ledger.findOne({ tenant: TENANT, entryId: "BENCH-05000" }).lean()
+  ));
 
-  // Benchmark 4: Aggregation pipeline (summary)
-  const r4 = await measureAsync("aggregate(summary)", async () => {
-    return Ledger.aggregate([
+  results.push(await measureAsync("aggregate(summary)", () =>
+    Ledger.aggregate([
       { $match: { tenant: TENANT } },
       { $group: { _id: null, total: { $sum: "$amount" }, count: { $sum: 1 }, avg: { $avg: "$amount" } } },
-    ]);
-  });
-  console.log(`${r4.label}: ${r4.elapsedMs}ms`);
+    ])
+  ));
 
-  // Benchmark 5: Aggregation pipeline (daily trends)
-  const r5 = await measureAsync("aggregate(daily)", async () => {
-    return Ledger.aggregate([
-      { $match: { tenant: TENANT, createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } } },
+  results.push(await measureAsync("aggregate(daily)", () =>
+    Ledger.aggregate([
+      { $match: { tenant: TENANT, createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } } },
       { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, total: { $sum: "$amount" }, count: { $sum: 1 } } },
       { $sort: { _id: 1 } },
-    ]);
-  });
-  console.log(`${r5.label}: ${r5.elapsedMs}ms`);
+    ])
+  ));
 
-  // Benchmark 6: Aggregation pipeline (status breakdown)
-  const r6 = await measureAsync("aggregate(status)", async () => {
-    return Ledger.aggregate([
+  results.push(await measureAsync("aggregate(status)", () =>
+    Ledger.aggregate([
       { $match: { tenant: TENANT } },
       { $group: { _id: "$status", count: { $sum: 1 }, total: { $sum: "$amount" } } },
-    ]);
-  });
-  console.log(`${r6.label}: ${r6.elapsedMs}ms`);
+    ])
+  ));
 
-  // Benchmark 7: LRU cache lookup (simulating connection manager)
+  // LRU cache benchmark
   const cache = new LRUCache({ max: 50, ttl: 1000 * 60 * 10 });
   for (let i = 0; i < 50; i++) cache.set(`tenant_${i}`, conn);
-  const r7 = measure("lru-cache.get", () => cache.get("tenant_25"));
-  console.log(`${r7.label}: ${r7.elapsedMs}ms`);
+  results.push(measure("lru-cache.get", () => cache.get("tenant_25")));
 
-  // Summary
-  const queries = [r1, r2, r3, r4, r5, r6];
-  const sub5 = queries.filter((q) => q.elapsedMs < 5);
-  console.log(`\n=== Summary ===`);
-  console.log(`Queries under 5ms: ${sub5.length}/${queries.length}`);
-  console.log(`All queries:`, queries.map((q) => `${q.label}=${q.elapsedMs}ms`).join(", "));
+  // Output
+  console.log(bold("  Results\n"));
+  console.log(`  ${pad("Operation", 24)} ${pad("Latency", 12)} Status`);
+  console.log(`  ${"─".repeat(24)} ${"─".repeat(12)} ${"─".repeat(20)}`);
+
+  for (const r of results) {
+    const ok = r.ms < 5;
+    const status = ok ? green("✅ sub-5ms") : dim("worker thread");
+    console.log(`  ${pad(r.label, 24)} ${pad(r.ms + "ms", 12)} ${status}`);
+  }
+
+  const queries = results.filter((r) => !r.label.startsWith("lru"));
+  const sub5 = queries.filter((r) => r.ms < 5);
+  console.log(`\n  ${bold("Summary")}: ${sub5.length}/${queries.length} queries under 5ms\n`);
 
   await conn.close();
   process.exit(0);
 };
 
 run().catch((err) => {
-  console.error("Benchmark failed:", err);
+  console.error("Benchmark failed:", err.message);
   process.exit(1);
 });

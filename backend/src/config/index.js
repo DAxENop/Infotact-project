@@ -12,12 +12,13 @@ const parseKeyMap = (value) => {
 
   const keyMap = {};
   const tenants = value.split(",");
-  for (const tenant of tenants) {
-    const [tenantId, publicKey] = tenant.split(":");
-    if (!tenantId || !publicKey) {
-      continue;
-    }
-    keyMap[tenantId.trim()] = publicKey.trim();
+  for (const entry of tenants) {
+    const idx = entry.indexOf(":");
+    if (idx === -1) continue;
+    const tenantId = entry.substring(0, idx).trim();
+    const publicKey = entry.substring(idx + 1).trim();
+    if (!tenantId || !publicKey) continue;
+    keyMap[tenantId] = publicKey;
   }
   return keyMap;
 };
